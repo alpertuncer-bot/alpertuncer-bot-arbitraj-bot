@@ -58,6 +58,13 @@ AKSESUAR_YASAKLI = [
     "şarj aleti", "sarj aleti", "batarya", "pil ", "pad ", "pedi"
 ]
 
+KAYNAK_SITELER = [
+    ("akakce.com", "Akakce", "https://www.akakce.com/arama/?q={sorgu}"),
+    ("vatanbilgisayar.com", "Vatan Bilgisayar", "https://www.vatanbilgisayar.com/arama/{sorgu}/"),
+    ("mediamarkt.com.tr", "MediaMarkt", "https://www.mediamarkt.com.tr/tr/search.html?query={sorgu}"),
+    ("a101.com.tr", "A101", "https://www.a101.com.tr/list/?search_text={sorgu}")
+]
+
 def renk_norm(r):
     r = r.lower().strip()
     harita = {
@@ -368,6 +375,75 @@ def sayfadan_urun_topla(page, domain, site_adi, urunler):
     else:
         kartlar = []
 
+    for kart in kartlar[:25]:
+        try:
+            metin = (kart.inner_text() or "").strip()
+            if not metin or aksesuar_mi(metin):
+                continue
+
+            fiyatlar = temiz_fiyat_bul(metin)
+            if not fiyatlar:
+                continue
+            alis_fiyat = min(fiyatlar)
+
+            link_el = kart.query_selector("a[href]")
+            href = (link_el.get_attribute("href") or "") if link_el else ""
+            if href.startswith("/"):
+                href = f"https://www.{domain}{href}"
+
+            satirlar = [s.strip() for s in metin.split("\n") if len(s.strip()) > 6]
+            urun_adi = max(satirlar, key=len) if satirlar else metin[:80]
+            kod = kod_cikar(urun_adi, href) or f"PRD{abs(hash(urun_adi)) % 90000 + 10000}"
+            marka = marka_bul(urun_adi) or "GENEL"
+            kampanya = kampanya_bul(metin)
+
+            urunler.append({
+                "kod": kod,
+                "marka": marka,
+                "urun_adi": urun_adi[:140],
+                "alis_site": domain,
+                "alis_fiyat": alis_fiyat,
+                "alis_link": href,
+                "kampanya": kampanya
+            })
+        except Exception:
+            continue
+
+def trendyol_fiyat_bul(page, sorgu):
+    ty_url = f"https://www.trendyol.com/sr?q={quote(sorgu)}"
+    try:
+        if not guvenli_git(page, ty_url, timeout=16000):
+            return 0.0, 0.0, 0, ty_url, ""
+        page.wait_for_timeout(1200)
+        popup_temizle(page)
+        kartlar = page.query_selector_all("[data-testid='product-card'], .p-card-wrppr, div.product-card")
+        fiyat_adaylari = []
+        baslik_adaylari = []
+        yorum_toplam = 0
+
+        for kart in kartlar[:8]:
+            m = (kart.inner_text() or "").strip()
+            if not m or aksesuar_mi(m):
+                continue
+            fl = temiz_fiyat_bul(m)
+            if fl:
+                fiyat_adaylari.append(min(fl))
+            yorum_toplam = max(yorum_toplam, yorum_sayisi_bul(m))
+            satirlar = [x.strip() for x in m.split("\n") if len(x.strip()) > 8]
+            if satirlar:
+                baslik_adaylari.append(max(satirlar, key=len))
+
+        if not fiyat_adaylari:
+            return 0.0, 0.0, yorum_toplam, ty_url, ""
+
+        fiyat_adaylari.sort()
+        fiyat_1 = fiyat_adaylari[0]
+        fiyat_2 = fiyat_adaylari[1] if len(fiyat_adaylari) > 1 else fiyat_1
+        baslik = baslik_adaylari[0] if baslik_adaylari else ""
+        return fiyat_1, fiyat_2, yorum_toplam, ty_url, baslik
+    except Exception:
+        return 0.0, 0.0, 0, ty_url, ""
+
 def sheets_satir_ekle(kaynak, aciklama, alis_fiyati, hedef, satis_fiyati):
     ham_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
     if not ham_json:
@@ -382,5 +458,130 @@ def sheets_satir_ekle(kaynak, aciklama, alis_fiyati, hedef, satis_fiyati):
     tarih = datetime.now().strftime("%d.%m.%Y %H:%M")
     ws.append_row([tarih, kaynak, aciklama, alis_fiyati, hedef, satis_fiyati])
 
+def firsat_kaydet_ve_yaz(veri, ayar):
+    tarih_saat = datetime.now().strftime("%d.%m.%Y %H:%M")
+    conn = sqlite3.connect(DB_DOSYA)
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO firsatlar (
+            tarih, kategori, kod, marka, urun_adi, alis_site, alis_fiyat,
+            satis_fiyat, satis_fiyat_2, fiyat_makasi_tl, fiyat_makasi_pct,
+            komisyon_oran, kargo_ucret, net_kar, roi, net_kar_2, roi_2,
+            yorum_sayisi, stok_durumu, kampanya, barem_onerisi,
+            alis_link, trendyol_link, durum
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Bekliyor')
+    """, (
+        tarih_saat, veri["kategori"], veri["kod"], veri["marka"], veri["urun_adi"],
+        veri["alis_site"], veri["alis_fiyat"], veri["satis_fiyat"], veri["satis_fiyat_2"],
+        veri["fiyat_makasi_tl"], veri["fiyat_makasi_pct"], veri["komisyon_oran"],
+        veri["kargo_ucret"], veri["net_kar"], veri["roi"], veri["net_kar_2"],
+        veri["roi_2"], veri["yorum_sayisi"], veri["stok_durumu"], veri["kampanya"],
+        veri["barem_onerisi"], veri["alis_link"], veri["trendyol_link"]
+    ))
+    conn.commit()
+    conn.close()
+
+    if ayar.get("google_sheets_aktif", True):
+        aciklama = (
+            f"[{veri['kod']}] {veri['urun_adi']} "
+            f"(ROI: %{veri['roi']}, Net: {veri['net_kar']} TL, Yorum: {veri['yorum_sayisi']})"
+        )
+        sheets_satir_ekle(
+            veri["alis_site"],
+            aciklama,
+            veri["alis_fiyat"],
+            "trendyol.com",
+            veri["satis_fiyat"]
+        )
+
+    telegram_uyari_gonder(veri)
+
+def bot_calistir():
+    db_baslat()
+    ayar = ayar_oku()
+    if not ayar.get("aktif", True):
+        print("Bot ayarlarda pasif durumda.")
+        return
+
+    bugun_str = datetime.now().strftime("%d.%m.%Y")
+    min_roi = float(ayar.get("min_roi", 15.0))
+    kampanya_min_roi = float(ayar.get("kampanya_min_roi", 5.0))
+    min_yorum = int(ayar.get("min_yorum", 150))
+    kategoriler = ayar.get("kategoriler") or VARSAYILAN_AYARLAR["kategoriler"]
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
+
+        for kategori in kategoriler:
+            urunler = []
+            for domain, site_adi, sablon_url in KAYNAK_SITELER:
+                url = sablon_url.format(sorgu=quote(kategori))
+                if guvenli_git(page, url):
+                    page.wait_for_timeout(1200)
+                    popup_temizle(page)
+                    sayfadan_urun_topla(page, domain, site_adi, urunler)
+
+            for u in urunler:
+                kod = u["kod"]
+                if kara_listede_mi(kod) or bugun_kayitli_mi(kod, bugun_str):
+                    continue
+
+                sorgu = f"{u['marka']} {kod}".strip() if u["marka"] != "GENEL" else u["urun_adi"][:50]
+                fiyat_1, fiyat_2, yorum_sayisi, ty_url, ty_baslik = trendyol_fiyat_bul(page, sorgu)
+                if fiyat_1 <= 0 or yorum_sayisi < min_yorum:
+                    continue
+
+                uyumlu, _ = renk_uyumlu_mu(u["urun_adi"], ty_baslik)
+                if not uyumlu:
+                    continue
+
+                stok_var, dogrulanmis_alis, stok_durum = stok_ve_fiyat_dogrula(page, u["alis_link"], u["alis_fiyat"])
+                if not stok_var or dogrulanmis_alis <= 0:
+                    continue
+
+                net_kar, roi, kom_oran, kargo_ucret, barem_oneri = net_kar_hesapla(dogrulanmis_alis, fiyat_1, kod, kategori)
+                net_kar_2, roi_2, _, _, _ = net_kar_hesapla(dogrulanmis_alis, fiyat_2, kod, kategori)
+                hedef_roi = kampanya_min_roi if u["kampanya"] else min_roi
+
+                if roi < hedef_roi or net_kar <= 0:
+                    continue
+
+                makas_tl = round(fiyat_1 - dogrulanmis_alis, 2)
+                makas_pct = round((makas_tl / dogrulanmis_alis) * 100, 1)
+
+                veri = {
+                    "kategori": kategori,
+                    "kod": kod,
+                    "marka": u["marka"],
+                    "urun_adi": u["urun_adi"],
+                    "alis_site": u["alis_site"],
+                    "alis_fiyat": dogrulanmis_alis,
+                    "satis_fiyat": fiyat_1,
+                    "satis_fiyat_2": fiyat_2,
+                    "fiyat_makasi_tl": makas_tl,
+                    "fiyat_makasi_pct": makas_pct,
+                    "komisyon_oran": kom_oran,
+                    "kargo_ucret": kargo_ucret,
+                    "net_kar": net_kar,
+                    "roi": roi,
+                    "net_kar_2": net_kar_2,
+                    "roi_2": roi_2,
+                    "yorum_sayisi": yorum_sayisi,
+                    "stok_durumu": stok_durum,
+                    "kampanya": u["kampanya"],
+                    "barem_onerisi": barem_oneri,
+                    "alis_link": u["alis_link"],
+                    "trendyol_link": ty_url
+                }
+
+                firsat_kaydet_ve_yaz(veri, ayar)
+                print(f"[+] Kaydedildi: [{kod}] {u['urun_adi'][:40]} | Net: {net_kar} TL | ROI: %{roi}")
+
+        browser.close()
+
 if __name__ == "__main__":
-    sheets_satir_ekle("amazon.com.tr", "Test Urunu", 100, "trendyol.com", 200)
+    bot_calistir()
