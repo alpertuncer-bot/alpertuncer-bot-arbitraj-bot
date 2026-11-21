@@ -364,4 +364,4 @@ def sayfadan_urun_topla(page, domain, site_adi, urunler):
     elif "akakce" in domain:
         kartlar = page.query_selector_all("li.p, li[data-pr], div[class*='product'], article")
     elif "cimri" in domain:
-        kartlar = page.query_selector_all("div.product-card"
+        kartlar = page.query_selector_all("div.product-card")
