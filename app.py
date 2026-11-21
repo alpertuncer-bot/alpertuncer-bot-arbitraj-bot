@@ -24,12 +24,22 @@ DURUM_DOSYA = "bot_durum.json"
 SHEET_ADI = "Arbitraj_Firsatlari"
 
 
+def gizli_deger_oku(anahtar, varsayilan=None):
+    deger = os.environ.get(anahtar)
+    if deger:
+        return deger
+    try:
+        return st.secrets.get(anahtar, varsayilan)
+    except Exception:
+        return varsayilan
+
+
 def giris_kontrol():
     if st.session_state.get("giris_yapildi"):
         return True
 
-    dogru_kullanici = os.environ.get("PANEL_USERNAME", "admin")
-    dogru_sifre = os.environ.get("PANEL_PASSWORD", "123456")
+    dogru_kullanici = gizli_deger_oku("PANEL_USERNAME", "admin")
+    dogru_sifre = gizli_deger_oku("PANEL_PASSWORD", "123456")
 
     st.title("Giriş Yap")
     with st.form("login_form"):
@@ -65,9 +75,13 @@ def ayar_kaydet(veri):
 
 
 def sheet_verisi_cek():
-    ham_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    ham_json = gizli_deger_oku("GOOGLE_CREDENTIALS_JSON")
     if not ham_json:
         return [], "GOOGLE_CREDENTIALS_JSON bulunamadı."
+
+    if isinstance(ham_json, dict):
+        ham_json = json.dumps(ham_json)
+
     try:
         creds = json.loads(ham_json)
         gc = gspread.service_account_from_dict(creds)
