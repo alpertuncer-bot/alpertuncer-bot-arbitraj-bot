@@ -581,26 +581,78 @@ def akakce_fark_atan_topla(page, kategoriler, limit=100):
     return urunler
 
 
+def trendyol_http_ara(sorgu_metni, urun_adi, min_yorum):
+    url = f"https://www.trendyol.com/sr?q={quote(sorgu_metni)}"
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=12)
+        html = resp.text or ""
+        if resp.status_code != 200 or "bir dakika lütfen" in html.lower():
+            return None, f"HTTP {resp.status_code}"
+
+        fiyat_adaylari = []
+        for m in re.finditer(r'href="([^"]*-p-\d+[^"]*)"', html):
+            href = m.group(1).replace("&amp;", "&")
+            if href.startswith("/"):
+                href = f"https://www.trendyol.com{href}"
+            pencere = html[max(0, m.start() - 400) : min(len(html), m.end() + 900)]
+            temiz_metin = re.sub(r"<[^>]+>", " ", pencere)
+            temiz_metin = re.sub(r"\s+", " ", temiz_metin)
+            if aksesuar_mi(temiz_metin):
+                continue
+            uyumlu, _ = renk_uyumlu_mu(urun_adi, temiz_metin)
+            if not uyumlu:
+                continue
+            fiyatlar = temiz_fiyat_bul(temiz_metin)
+            if not fiyatlar:
+                continue
+            yorum = yorum_sayisi_bul(temiz_metin)
+            if yorum < min_yorum:
+                continue
+            fiyat_adaylari.append((min(fiyatlar), yorum, href))
+
+        if not fiyat_adaylari:
+            return None, f"HTTP {resp.status_code} / 0 aday"
+
+        fiyat_adaylari.sort(key=lambda x: x[0])
+        fiyat_1, yorum_1, link_1 = fiyat_adaylari[0]
+        fiyat_2 = fiyat_adaylari[1][0] if len(fiyat_adaylari) > 1 else fiyat_1
+        return (fiyat_1, fiyat_2, yorum_1, link_1), f"HTTP {resp.status_code} / {len(fiyat_adaylari)} aday"
+    except Exception as e:
+        return None, f"HTTP hata: {str(e)[:40]}"
+
+
 def trendyol_fiyat_ara(page, kod, marka, urun_adi, min_yorum):
     sorgu_metni = f"{marka} {kod}".strip() if marka else kod
+    http_sonuc, http_not = trendyol_http_ara(sorgu_metni, urun_adi, min_yorum)
+    if http_sonuc:
+        fiyat_1, fiyat_2, yorum_1, link_1 = http_sonuc
+        print(f"     [TY-LOG] '{sorgu_metni}' ({http_not}) -> En iyi fiyat: {fiyat_1} TL (yorum:{yorum_1})")
+        return fiyat_1, fiyat_2, yorum_1, link_1
+
     sorgu = quote(sorgu_metni)
     url = f"https://www.trendyol.com/sr?q={sorgu}"
     if not guvenli_git(page, url, timeout=18000):
         print(f"     [TY-LOG] Sayfa acilamadi: {url}")
         return None
 
-    for _ in range(2):
-        page.wait_for_timeout(2000)
-        popup_temizle(page)
-        if "bir dakika" not in (page.title() or "").lower():
-            break
+    page.wait_for_timeout(1500)
+    popup_temizle(page)
 
     kartlar = page.query_selector_all("[data-testid='product-card'], .p-card-wrppr, div[class*='product-card']")
     if not kartlar:
         kartlar = page.query_selector_all("a[href*='-p-']")
     if not kartlar:
         baslik = (page.title() or "").strip()
-        print(f"     [TY-LOG] '{sorgu_metni}' icin 0 kart bulundu. (Title: '{baslik[:50]}' | URL: {page.url[:65]})")
+        print(f"     [TY-LOG] '{sorgu_metni}' ({http_not}) | Browser 0 kart (Title: '{baslik[:35]}')")
         return None
 
     adaylar = []
