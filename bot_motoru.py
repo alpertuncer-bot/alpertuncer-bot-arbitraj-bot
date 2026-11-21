@@ -582,28 +582,47 @@ def akakce_fark_atan_topla(page, kategoriler, limit=50):
 
 
 def trendyol_fiyat_ara(page, kod, marka, urun_adi, min_yorum):
-    sorgu = quote(f"{marka} {kod}".strip() if marka else kod)
+    sorgu_metni = f"{marka} {kod}".strip() if marka else kod
+    sorgu = quote(sorgu_metni)
     url = f"https://www.trendyol.com/sr?q={sorgu}"
     if not guvenli_git(page, url, timeout=17000):
+        print(f"     [TY-LOG] Sayfa acilamadi: {url}")
         return None
     page.wait_for_timeout(1200)
     popup_temizle(page)
 
     kartlar = page.query_selector_all("[data-testid='product-card'], .p-card-wrppr, div[class*='product-card']")
+    if not kartlar:
+        print(f"     [TY-LOG] '{sorgu_metni}' icin 0 kart bulundu.")
+        return None
+
     adaylar = []
+    aksesuar_elenen = 0
+    renk_elenen = 0
+    fiyat_elenen = 0
+    yorum_elenen = 0
+    bulunan_yorumlar = []
+
     for kart in kartlar[:12]:
         try:
             metin = (kart.inner_text() or "").strip()
-            if not metin or aksesuar_mi(metin):
+            if not metin:
+                continue
+            if aksesuar_mi(metin):
+                aksesuar_elenen += 1
                 continue
             uyumlu, _ = renk_uyumlu_mu(urun_adi, metin)
             if not uyumlu:
+                renk_elenen += 1
                 continue
             fiyatlar = temiz_fiyat_bul(metin)
             if not fiyatlar:
+                fiyat_elenen += 1
                 continue
             yorum = yorum_sayisi_bul(metin)
+            bulunan_yorumlar.append(yorum)
             if yorum < min_yorum:
+                yorum_elenen += 1
                 continue
             link_el = kart.query_selector("a[href]")
             href = link_el.get_attribute("href") if link_el else ""
@@ -614,11 +633,18 @@ def trendyol_fiyat_ara(page, kod, marka, urun_adi, min_yorum):
             continue
 
     if not adaylar:
+        maks_yorum = max(bulunan_yorumlar) if bulunan_yorumlar else 0
+        print(
+            f"     [TY-LOG] '{sorgu_metni}' -> {len(kartlar)} kart | "
+            f"aksesuar:{aksesuar_elenen}, renk:{renk_elenen}, fiyatYok:{fiyat_elenen}, "
+            f"yorumAz:{yorum_elenen} (en yuksek yorum:{maks_yorum}, min:{min_yorum})"
+        )
         return None
 
     adaylar.sort(key=lambda x: x[0])
     fiyat_1, yorum_1, link_1 = adaylar[0]
     fiyat_2 = adaylar[1][0] if len(adaylar) > 1 else fiyat_1
+    print(f"     [TY-LOG] '{sorgu_metni}' -> {len(adaylar)} aday bulundu | En iyi fiyat: {fiyat_1} TL (yorum:{yorum_1})")
     return fiyat_1, fiyat_2, yorum_1, link_1
 
 
