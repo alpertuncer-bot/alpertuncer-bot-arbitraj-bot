@@ -365,7 +365,10 @@ def sayfadan_urun_topla(page, domain, site_adi, urunler):
         kartlar = page.query_selector_all("li.p, li[data-pr], div[class*='product'], article")
     elif "cimri" in domain:
         kartlar = page.query_selector_all("div.product-card")
-    def sheets_satir_ekle(kaynak, aciklama, alis_fiyati, hedef, satis_fiyati):
+    else:
+        kartlar = []
+
+def sheets_satir_ekle(kaynak, aciklama, alis_fiyati, hedef, satis_fiyati):
     ham_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
     if not ham_json:
         print("UYARI: GOOGLE_CREDENTIALS_JSON ortam değişkeni bulunamadı.")
@@ -378,19 +381,6 @@ def sayfadan_urun_topla(page, domain, site_adi, urunler):
 
     tarih = datetime.now().strftime("%d.%m.%Y %H:%M")
     ws.append_row([tarih, kaynak, aciklama, alis_fiyati, hedef, satis_fiyati])
-    if __name__ == "__main__":
-    sheets_satir_ekle("amazon.com.tr", "Test Urunu", 100, "trendyol.com", 200)
-    ham_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
-    if not ham_json:
-        print("UYARI: GOOGLE_CREDENTIALS_JSON ortam değişkeni bulunamadı.")
-        return
 
-    creds_dict = json.loads(ham_json)
-    gc = gspread.service_account_from_dict(creds_dict)
-    sh = gc.open("Arbitraj_Firsatlari")
-    ws = sh.worksheet("Sheet1")
-
-    tarih = datetime.now().strftime("%d.%m.%Y %H:%M")
-    ws.append_row([tarih, kaynak, aciklama, alis_fiyati, hedef, satis_fiyati])
-    if __name__ == "__main__":
+if __name__ == "__main__":
     sheets_satir_ekle("amazon.com.tr", "Test Urunu", 100, "trendyol.com", 200)
