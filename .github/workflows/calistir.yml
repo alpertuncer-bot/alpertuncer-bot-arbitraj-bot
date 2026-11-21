@@ -1,0 +1,29 @@
+name: Arbitraj Botu Zamanlayici
+
+on:
+  schedule:
+    - cron: '0 18 * * *'
+    - cron: '30 19 * * *'
+  workflow_dispatch:
+
+jobs:
+  calistir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Kodlari Cek
+        uses: actions/checkout@v4
+
+      - name: Python Kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Paketleri Yukle
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Botu Calistir
+        run: python bot_motoru.py
