@@ -588,8 +588,12 @@ def trendyol_fiyat_ara(page, kod, marka, urun_adi, min_yorum):
     if not guvenli_git(page, url, timeout=18000):
         print(f"     [TY-LOG] Sayfa acilamadi: {url}")
         return None
-    page.wait_for_timeout(1600)
-    popup_temizle(page)
+
+    for _ in range(2):
+        page.wait_for_timeout(2000)
+        popup_temizle(page)
+        if "bir dakika" not in (page.title() or "").lower():
+            break
 
     kartlar = page.query_selector_all("[data-testid='product-card'], .p-card-wrppr, div[class*='product-card']")
     if not kartlar:
@@ -686,7 +690,10 @@ def firsat_kaydet(veri):
 def calistir(tek_tur=True):
     db_baslat()
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
         context = browser.new_context(
             viewport={"width": 1366, "height": 900},
             locale="tr-TR",
@@ -696,6 +703,7 @@ def calistir(tek_tur=True):
                 "Chrome/124.0.0.0 Safari/537.36"
             ),
         )
+        context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         page = context.new_page()
 
         try:
@@ -716,73 +724,4 @@ def calistir(tek_tur=True):
 
                 for u in fark_atan_urunler:
                     kod = u["kod"]
-                    print(f"  -> Kontrol ediliyor: [{u['kategori']}] {kod} ({u['alis_fiyat']} TL)")
-                    if kara_listede_mi(kod) or bugun_kayitli_mi(kod, bugun_str):
-                        print("     [=] Bugun zaten kayitli veya kara listede, atlaniyor.")
-                        continue
-
-                    ty_sonuc = trendyol_fiyat_ara(page, kod, u["marka"], u["urun_adi"], min_yorum)
-                    if not ty_sonuc:
-                        print("     [-] Trendyol'da uygun eslesme/yorum bulunamadi.")
-                        continue
-
-                    satis_1, satis_2, yorum_sayisi, ty_link = ty_sonuc
-                    stok_ok, dogrulanmis_alis, stok_durumu = stok_ve_fiyat_dogrula(
-                        page, u["alis_link"], u["alis_fiyat"]
-                    )
-                    if not stok_ok:
-                        print(f"     [-] Stok uygun degil: {stok_durumu}")
-                        continue
-
-                    net_kar, roi, kom_oran, kargo_ucret, barem_oneri = net_kar_hesapla(
-                        dogrulanmis_alis, satis_1, kod=kod, kategori=u["kategori"]
-                    )
-                    if roi < min_roi:
-                        print(f"     [-] ROI dusuk (%{roi} < %{min_roi}).")
-                        continue
-
-                    net_kar_2, roi_2, _, _, _ = net_kar_hesapla(
-                        dogrulanmis_alis, satis_2, kod=kod, kategori=u["kategori"]
-                    )
-                    makas_tl = round(satis_2 - satis_1, 2)
-                    makas_pct = round(((satis_2 - satis_1) / satis_1) * 100, 1) if satis_1 > 0 else 0.0
-
-                    veri = {
-                        "tarih": datetime.now().strftime("%d.%m.%Y %H:%M"),
-                        "kategori": u["kategori"],
-                        "kod": kod,
-                        "marka": u["marka"],
-                        "urun_adi": u["urun_adi"],
-                        "alis_site": u["alis_site"],
-                        "alis_fiyat": dogrulanmis_alis,
-                        "satis_fiyat": satis_1,
-                        "satis_fiyat_2": satis_2,
-                        "fiyat_makasi_tl": makas_tl,
-                        "fiyat_makasi_pct": makas_pct,
-                        "komisyon_oran": kom_oran,
-                        "kargo_ucret": kargo_ucret,
-                        "net_kar": net_kar,
-                        "roi": roi,
-                        "net_kar_2": net_kar_2,
-                        "roi_2": roi_2,
-                        "yorum_sayisi": yorum_sayisi,
-                        "stok_durumu": stok_durumu,
-                        "kampanya": u["kampanya"],
-                        "barem_onerisi": barem_oneri,
-                        "alis_link": u["alis_link"],
-                        "trendyol_link": ty_link,
-                        "durum": "Bekliyor",
-                    }
-                    print(f"     [+] FIRSAT KAYDEDILIYOR: {kod} | Net Kar: {net_kar} TL | ROI: %{roi}")
-                    firsat_kaydet(veri)
-
-                if tek_tur:
-                    break
-                time.sleep(300)
-        finally:
-            context.close()
-            browser.close()
-
-
-if __name__ == "__main__":
-    calistir(tek_tur=True)
+                    print(f"  -> Kontrol ediliyor: [{u['kategori']}] {kod} ({u['alis
