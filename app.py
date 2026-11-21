@@ -207,3 +207,71 @@ with tab1:
                 durum_filtre = st.selectbox("İşlem Durumu", ["Tümü", "Bekliyor", "Satın Alındı", "İptal / Stok Yok"])
             with f4:
                 filtre_min_roi = st.number_input("Min. ROI (%)", min_value=-50.0, max_value=500.0, value=0.0, step=1.0)
+            with f5:
+                siralama = st.selectbox("Sırala", ["En Yeni", "Net Kâr (Yüksek)", "ROI (Yüksek)"])
+
+            filt_df = df.copy()
+            if arama_metni:
+                mask = filt_df.apply(lambda r: arama_metni.lower() in str(r).lower(), axis=1)
+                filt_df = filt_df[mask]
+            if secili_site != "Tümü":
+                filt_df = filt_df[filt_df["alis_site"] == secili_site]
+            if durum_filtre != "Tümü":
+                filt_df = filt_df[filt_df["durum"] == durum_filtre]
+            if "roi" in filt_df.columns:
+                filt_df = filt_df[filt_df["roi"].fillna(0) >= filtre_min_roi]
+
+            if siralama == "Net Kâr (Yüksek)" and "net_kar" in filt_df.columns:
+                filt_df = filt_df.sort_values("net_kar", ascending=False)
+            elif siralama == "ROI (Yüksek)" and "roi" in filt_df.columns:
+                filt_df = filt_df.sort_values("roi", ascending=False)
+            elif "id" in filt_df.columns:
+                filt_df = filt_df.sort_values("id", ascending=False)
+
+            st.dataframe(filt_df, use_container_width=True)
+
+with tab2:
+    st.subheader("📈 Komisyon Baremleri & Tarife Yükle")
+    st.info("Komisyon baremi veya tarife dosyanı buradan yönetebilirsin.")
+    yuklenen = st.file_uploader("Komisyon / Tarife Dosyası Yükle (CSV veya JSON)", type=["csv", "json"])
+    if yuklenen is not None:
+        try:
+            if yuklenen.name.endswith(".csv"):
+                tarife_df = pd.read_csv(yuklenen)
+                st.dataframe(tarife_df, use_container_width=True)
+            else:
+                tarife_veri = json.load(yuklenen)
+                st.json(tarife_veri)
+            st.success("Dosya başarıyla okundu.")
+        except Exception as e:
+            st.error(f"Dosya okunamadı: {e}")
+
+with tab3:
+    st.subheader("🚫 Kara Liste (Blacklist)")
+    ayar_bl = ayar_oku()
+    mevcut_bl = ayar_bl.get("kara_liste", [])
+    yeni_bl_metin = st.text_area(
+        "Engellenecek Marka / Kelime / Satıcılar (Her satıra bir tane)",
+        value="\n".join(mevcut_bl) if isinstance(mevcut_bl, list) else "",
+        height=150,
+    )
+    if st.button("Kara Listeyi Kaydet"):
+        satirlar = [s.strip() for s in yeni_bl_metin.splitlines() if s.strip()]
+        ayar_bl["kara_liste"] = satirlar
+        ayar_yaz(ayar_bl)
+        st.success("Kara liste güncellendi!")
+
+with tab4:
+    st.subheader("☁️ Google Sheets Canlı Verileri")
+    if st.button("🔄 Verileri Yenile", key="sheets_yenile"):
+        st.rerun()
+
+    kayitlar, hata = sheet_verisi_cek()
+    if hata:
+        st.error(hata)
+    elif not kayitlar:
+        st.info("Google Sheets (`Arbitraj_Firsatlari` / `Sheet1`) içinde henüz kayıt bulunmuyor.")
+    else:
+        df_sheets = pd.DataFrame(kayitlar)
+        st.caption(f"Toplam kayıt: {len(df_sheets)}")
+        st.dataframe(df_sheets, use_container_width=True)
