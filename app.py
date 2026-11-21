@@ -206,4 +206,4 @@ with tab1:
             with f3:
                 durum_filtre = st.selectbox("İşlem Durumu", ["Tümü", "Bekliyor", "Satın Alındı", "İptal / Stok Yok"])
             with f4:
-                filtre_min_roi = st.number_input("Min.
+                filtre_min_roi = st.number_input("Min. ROI (%)", min_value=-50.0, max_value=500.0, value=0.0, step=1.0)
