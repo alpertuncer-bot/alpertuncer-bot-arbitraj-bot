@@ -1,34 +1,31 @@
-name: Arbitraj Bot Tarama
+name: Arbitraj Bot Bulut Taramasi
 
 on:
-  schedule:
-    - cron: "*/30 * * * *"
   workflow_dispatch:
+  schedule:
+    - cron: "0 */3 * * *"
 
 jobs:
-  run-bot:
+  tarama:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
-      - name: Depoyu cek
+      - name: Depoyu Cek
         uses: actions/checkout@v4
 
-      - name: Python kur
+      - name: Python Kur
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Bagimliliklari yukle
+      - name: Bagimliliklari Kur ve Playwright Tarayicisini Yukle
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install playwright gspread requests pandas
+          pip install gspread playwright requests
+          python -m playwright install chromium
+          python -m playwright install-deps chromium
 
-      - name: Playwright Chromium kur
-        run: python -m playwright install --with-deps chromium
-
-      - name: Botu tek tur calistir
+      - name: Bot Motorunu Calistir
         env:
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python -c "import bot_motoru; bot_motoru.calistir(tek_tur=True)"
+        run: python bot_motoru.py
