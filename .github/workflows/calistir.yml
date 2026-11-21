@@ -26,4 +26,6 @@ jobs:
           playwright install-deps chromium
 
       - name: Botu Calistir
+        env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         run: python bot_motoru.py
