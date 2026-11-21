@@ -525,7 +525,7 @@ def stok_ve_fiyat_dogrula(page, link, beklenen_alis):
         return True, beklenen_alis, "Sayfa Doğrulanamadı"
 
 
-def akakce_fark_atan_topla(page, kategoriler, limit=50):
+def akakce_fark_atan_topla(page, kategoriler, limit=100):
     urunler = []
     print(f"[Akakce Fark Atan] Sayfa aciliyor: {AKAKCE_FARK_ATAN_URL}")
     if not guvenli_git(page, AKAKCE_FARK_ATAN_URL, timeout=20000):
@@ -585,15 +585,18 @@ def trendyol_fiyat_ara(page, kod, marka, urun_adi, min_yorum):
     sorgu_metni = f"{marka} {kod}".strip() if marka else kod
     sorgu = quote(sorgu_metni)
     url = f"https://www.trendyol.com/sr?q={sorgu}"
-    if not guvenli_git(page, url, timeout=17000):
+    if not guvenli_git(page, url, timeout=18000):
         print(f"     [TY-LOG] Sayfa acilamadi: {url}")
         return None
-    page.wait_for_timeout(1200)
+    page.wait_for_timeout(1600)
     popup_temizle(page)
 
     kartlar = page.query_selector_all("[data-testid='product-card'], .p-card-wrppr, div[class*='product-card']")
     if not kartlar:
-        print(f"     [TY-LOG] '{sorgu_metni}' icin 0 kart bulundu.")
+        kartlar = page.query_selector_all("a[href*='-p-']")
+    if not kartlar:
+        baslik = (page.title() or "").strip()
+        print(f"     [TY-LOG] '{sorgu_metni}' icin 0 kart bulundu. (Title: '{baslik[:50]}' | URL: {page.url[:65]})")
         return None
 
     adaylar = []
@@ -624,7 +627,7 @@ def trendyol_fiyat_ara(page, kod, marka, urun_adi, min_yorum):
             if yorum < min_yorum:
                 yorum_elenen += 1
                 continue
-            link_el = kart.query_selector("a[href]")
+            link_el = kart if kart.evaluate("el => el.tagName.toLowerCase() === 'a'") else kart.query_selector("a[href]")
             href = link_el.get_attribute("href") if link_el else ""
             if href and href.startswith("/"):
                 href = f"https://www.trendyol.com{href}"
@@ -684,7 +687,15 @@ def calistir(tek_tur=True):
     db_baslat()
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(viewport={"width": 1366, "height": 900})
+        context = browser.new_context(
+            viewport={"width": 1366, "height": 900},
+            locale="tr-TR",
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+        )
         page = context.new_page()
 
         try:
@@ -701,7 +712,7 @@ def calistir(tek_tur=True):
                 min_yorum = int(ayar.get("min_yorum", 150))
                 kategoriler = ayar.get("kategoriler") or VARSAYILAN_AYARLAR["kategoriler"]
 
-                fark_atan_urunler = akakce_fark_atan_topla(page, kategoriler, limit=50)
+                fark_atan_urunler = akakce_fark_atan_topla(page, kategoriler, limit=100)
 
                 for u in fark_atan_urunler:
                     kod = u["kod"]
