@@ -146,7 +146,7 @@ with st.sidebar:
             subprocess.Popen(["cmd", "/c", "start", "python", "bot_motoru.py"], shell=True)
             st.info("Tarama motoru ayrı pencerede başlatıldı.")
         else:
-            st.warning("Bu buton yalnızca yerel Windows ortamında yeni pencere açar. Bulutta motoru ayrı iş akışı/ortamda çalıştırın.")
+            st.warning("Bu buton yalnızca yerel Windows ortamında yeni pencere açar.")
 
     st.divider()
     yeni_min_roi = st.slider("Tarama Min. Net Kâr Oranı (%)", 5.0, 50.0, float(ayar.get("min_roi", 15.0)), 1.0)
@@ -290,66 +290,4 @@ with tab1:
                             st.caption(f"Makas: `+{row['fiyat_makasi_tl']:,.2f} TL` (`%{row['fiyat_makasi_pct']}`) | Kom: `%{row['komisyon_oran']}`")
                         with c3:
                             st.markdown(f"### 💰 +{row['net_kar']:,.2f} TL (`%{row['roi']}`)")
-                            st.caption(f"2. Fiyata Göre Kâr: `+{row['net_kar_2']:,.2f} TL` (`%{row['roi_2']}`)")
-                            st.caption(f"Durum: **{row['durum']}**")
-                        with c4:
-                            st.link_button("🛒 Alış Sitesine Git", row["alis_link"], use_container_width=True)
-                            if row["trendyol_link"]:
-                                st.link_button("🟠 Trendyol İlanı", row["trendyol_link"], use_container_width=True)
-                            b_al, b_red = st.columns(2)
-                            with b_al:
-                                if st.button("✅ Aldım", key=f"al_{row['id']}", use_container_width=True):
-                                    conn = baglan()
-                                    conn.execute("UPDATE firsatlar SET durum = 'Satın Alındı' WHERE id = ?", (row["id"],))
-                                    conn.commit()
-                                    conn.close()
-                                    st.rerun()
-                            with b_red:
-                                if st.button("🚫 Engelle", key=f"bl_{row['id']}", use_container_width=True):
-                                    conn = baglan()
-                                    conn.execute("INSERT OR IGNORE INTO kara_liste (kod, sebep, tarih) VALUES (?, ?, ?)",
-                                                 (row["kod"], "Panelden engellendi", datetime.now().strftime("%d.%m.%Y")))
-                                    conn.execute("UPDATE firsatlar SET durum = 'İptal / Stok Yok' WHERE id = ?", (row["id"],))
-                                    conn.commit()
-                                    conn.close()
-                                    st.rerun()
-
-with tab2:
-    st.subheader("Trendyol Fiyat Baremli Komisyon & Kargo Tablosu")
-    st.write("Haftada 2 kez değişen komisyon baremlerini tablodan düzenleyebilir veya Trendyol'dan indirdiğiniz güncel tarife Excel/CSV dosyasını yükleyebilirsiniz.")
-
-    if os.path.exists(DB_DOSYA):
-        conn = baglan()
-        try:
-            barem_df = pd.read_sql_query("SELECT kategori, min_fiyat, max_fiyat, komisyon, kargo FROM baremler", conn)
-        except Exception:
-            barem_df = pd.DataFrame(columns=["kategori", "min_fiyat", "max_fiyat", "komisyon", "kargo"])
-        conn.close()
-
-        duzenlenen = st.data_editor(barem_df, num_rows="dynamic", use_container_width=True)
-        if st.button("💾 Barem Tablosunu Güncelle", type="primary"):
-            conn = baglan()
-            conn.execute("DELETE FROM baremler")
-            for _, r in duzenlenen.iterrows():
-                conn.execute("INSERT INTO baremler (kategori, min_fiyat, max_fiyat, komisyon, kargo) VALUES (?, ?, ?, ?, ?)",
-                             (str(r["kategori"]), float(r["min_fiyat"]), float(r["max_fiyat"]), float(r["komisyon"]), float(r["kargo"])))
-            conn.commit()
-            conn.close()
-            st.success("Komisyon baremleri kaydedildi!")
-
-    st.divider()
-    st.subheader("📥 Trendyol Komisyon Tarifesi Excel / CSV Yükle")
-    yuklenen = st.file_uploader("Dosya Seçin (.xlsx veya .csv)", type=["xlsx", "csv"])
-    if yuklenen is not None:
-        t_df = pd.read_csv(yuklenen) if yuklenen.name.endswith(".csv") else pd.read_excel(yuklenen)
-        st.dataframe(t_df.head(10), use_container_width=True)
-        kod_sutun = st.selectbox("Model Kodu / Barkod Sütunu", t_df.columns)
-        kom_sutun = st.selectbox("Komisyon Oranı (%) Sütunu", t_df.columns)
-        if st.button("🚀 Özel Komisyon Oranlarını Sisteme İşle"):
-            conn = baglan()
-            sayac = 0
-            for _, r in t_df.iterrows():
-                k_val = str(r[kod_sutun]).strip().upper().replace("-", "")
-                try:
-                    c_val = float(str(r[kom_sutun]).replace("%", "").replace(",", ".").strip())
-                    if k_val and 0 < c_val < 60:
+                            st.caption(f"2. Fiyata Göre Kâr:
