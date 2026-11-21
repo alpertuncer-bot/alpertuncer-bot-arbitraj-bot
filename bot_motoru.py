@@ -593,8 +593,10 @@ def trendyol_http_ara(sorgu_metni, urun_adi, min_yorum):
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
     try:
-        resp = requests.get(url, headers=headers, timeout=12)
+        resp = requests.get(url, headers=headers, timeout=10)
         html = resp.text or ""
+        if resp.status_code == 403:
+            return None, "HTTP 403 (Bulut IP Engeli)"
         if resp.status_code != 200 or "bir dakika lütfen" in html.lower():
             return None, f"HTTP {resp.status_code}"
 
@@ -637,6 +639,10 @@ def trendyol_fiyat_ara(page, kod, marka, urun_adi, min_yorum):
         fiyat_1, fiyat_2, yorum_1, link_1 = http_sonuc
         print(f"     [TY-LOG] '{sorgu_metni}' ({http_not}) -> En iyi fiyat: {fiyat_1} TL (yorum:{yorum_1})")
         return fiyat_1, fiyat_2, yorum_1, link_1
+
+    if "403" in http_not:
+        print(f"     [TY-LOG] '{sorgu_metni}' -> {http_not} (Bulutta Trendyol aramasi engelli)")
+        return None
 
     sorgu = quote(sorgu_metni)
     url = f"https://www.trendyol.com/sr?q={sorgu}"
