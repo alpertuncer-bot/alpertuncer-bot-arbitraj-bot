@@ -378,3 +378,5 @@ def sayfadan_urun_topla(page, domain, site_adi, urunler):
 
     tarih = datetime.now().strftime("%d.%m.%Y %H:%M")
     ws.append_row([tarih, kaynak, aciklama, alis_fiyati, hedef, satis_fiyati])
+    if __name__ == "__main__":
+    sheets_satir_ekle("amazon.com.tr", "Test Urunu", 100, "trendyol.com", 200)
